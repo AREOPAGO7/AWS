@@ -1,49 +1,44 @@
-name: Deploy React App to EC2
+name: Deploy to EC2
 
 on:
   push:
     branches:
-      - master  # Adjust to your preferred branch name
+      - master  # Trigger on push to the master branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # Checkout the code from GitHub
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    # Set up SSH to access the EC2 instance
-    - name: Set up SSH
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16'  # Adjust according to your Node.js version
 
-    # Install Node.js and npm to build the React app
-    - name: Set up Node.js
-      uses: actions/setup-node@v2
-      with:
-        node-version: '16'  # Adjust to the Node.js version you need
+      - name: Install dependencies
+        run: npm install
 
-    # Install dependencies and build the app
-    - name: Build the React app
-      run: |
-        npm install
-        npm run build  # This creates the build folder
+      - name: Build React app
+        run: npm run build
 
-    # Copy the build folder to the EC2 instance
-    - name: Deploy React app to EC2
-      run: |
-        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r ./build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_IP }}:/home/ubuntu/AWS/
+      - name: Deploy to EC2
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}  # GitHub secret for the private key
+          EC2_USER: ${{ secrets.EC2_USER }}  # GitHub secret for the EC2 user
+          EC2_IP: ${{ secrets.EC2_IP }}  # GitHub secret for the EC2 public IP
+        run: |
+          echo "$EC2_KEY" > ec2_private_key.pem
+          chmod 600 ec2_private_key.pem
 
-    # SSH into EC2 and copy build files to Nginx directory
-    - name: Update React app on EC2
-      run: |
-        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_IP }} << 'EOF'
-          sudo rm -rf /var/www/html/*
-          sudo cp -r /home/ubuntu/AWS/* /var/www/html/
-          sudo systemctl restart nginx
-        EOF
+          # Transfer the build folder to the EC2 instance
+          scp -i ec2_private_key.pem -o StrictHostKeyChecking=no -r ./build/* $EC2_USER@$EC2_IP:/home/ubuntu/AWS/
+
+          # SSH into EC2 and install dependencies (if needed) and start the app
+          ssh -i ec2_private_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
+            cd /home/ubuntu/AWS
+            npm install  # Install any server-side dependencies
+            npm start    # Start the application
+          EOF
