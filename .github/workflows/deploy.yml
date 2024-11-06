@@ -1,24 +1,27 @@
-name: Deploy to EC2
+name: Deploy to AWS EC2
 
 on:
   push:
     branches:
-      - master
+      - master  # Replace with your desired branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-      - name: Set up SSH key
-        run: |
-          echo "$EC2_KEY" > TESTrepo.pem
-          chmod 600 TESTrepo.pem
+    - name: Set up SSH key
+      run: |
+        echo "$EC2_KEY" > ec2_private_key.pem
+        chmod 600 ec2_private_key.pem
 
-      - name: Deploy to EC2
-        run: |
-          scp -i TESTrepo.pem -o StrictHostKeyChecking=no -r ./build/* ubuntu@34.204.74.178:/home/ubuntu/AWS/
-        env:
-          EC2_KEY: ${{ secrets.EC2_KEY }}
+    - name: Deploy React app to EC2
+      run: |
+        scp -i ec2_private_key.pem -o StrictHostKeyChecking=no -r ./build/* ubuntu@34.204.74.178:/home/ubuntu/AWS/
+
+    - name: SSH into EC2 to restart the server (if necessary)
+      run: |
+        ssh -i ec2_private_key.pem -o StrictHostKeyChecking=no ubuntu@34.204.74.178 "cd /home/ubuntu/AWS && pm2 restart app.js"
