@@ -3,42 +3,22 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - master  # Trigger on push to the master branch
+      - master
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v2
-        with:
-          node-version: '16'  # Adjust according to your Node.js version
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build React app
-        run: npm run build
+      - name: Set up SSH key
+        run: |
+          echo "$EC2_KEY" > TESTrepo.pem
+          chmod 600 TESTrepo.pem
 
       - name: Deploy to EC2
-        env:
-          EC2_KEY: ${{ secrets.EC2_KEY }}  # GitHub secret for the private key
-          EC2_USER: ${{ secrets.EC2_USER }}  # GitHub secret for the EC2 user
-          EC2_IP: ${{ secrets.EC2_IP }}  # GitHub secret for the EC2 public IP
         run: |
-          echo "$EC2_KEY" > ec2_private_key.pem
-          chmod 600 ec2_private_key.pem
-
-          # Transfer the build folder to the EC2 instance
-          scp -i ec2_private_key.pem -o StrictHostKeyChecking=no -r ./build/* $EC2_USER@$EC2_IP:/home/ubuntu/AWS/
-
-          # SSH into EC2 and install dependencies (if needed) and start the app
-          ssh -i ec2_private_key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
-            cd /home/ubuntu/AWS
-            npm install  # Install any server-side dependencies
-            npm start    # Start the application
-          EOF
+          scp -i TESTrepo.pem -o StrictHostKeyChecking=no -r ./build/* ubuntu@34.204.74.178:/home/ubuntu/AWS/
+        env:
+          EC2_KEY: ${{ secrets.EC2_KEY }}
