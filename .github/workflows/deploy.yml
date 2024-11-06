@@ -1,39 +1,49 @@
-name: Deploy to EC2
+name: Deploy React App to EC2
 
 on:
   push:
     branches:
-      - master  # Or main, depending on your branch name
+      - master  # Adjust to your preferred branch name
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    # Checkout the code from GitHub
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Set up SSH key
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}  # Store your private key in GitHub Secrets
+    # Set up SSH to access the EC2 instance
+    - name: Set up SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'  # Or whichever version you're using
+    # Install Node.js and npm to build the React app
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '16'  # Adjust to the Node.js version you need
 
-      - name: Install dependencies
-        run: npm install
-        working-directory: ./AWS  # Path to your React app
+    # Install dependencies and build the app
+    - name: Build the React app
+      run: |
+        npm install
+        npm run build  # This creates the build folder
 
-      - name: Build React app
-        run: npm run build
-        working-directory: ./AWS  # Path to your React app
+    # Copy the build folder to the EC2 instance
+    - name: Deploy React app to EC2
+      run: |
+        scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r ./build/* ${{ secrets.EC2_USER }}@${{ secrets.EC2_IP }}:/home/ubuntu/AWS/
 
-      - name: Deploy to EC2
-        run: |
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r ./AWS/build/* ubuntu@your-ec2-public-ip:/home/ubuntu/AWS/build/
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ubuntu@your-ec2-public-ip 'bash -s' < ./deploy.sh
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+    # SSH into EC2 and copy build files to Nginx directory
+    - name: Update React app on EC2
+      run: |
+        ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_IP }} << 'EOF'
+          sudo rm -rf /var/www/html/*
+          sudo cp -r /home/ubuntu/AWS/* /var/www/html/
+          sudo systemctl restart nginx
+        EOF
